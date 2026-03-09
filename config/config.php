@@ -29,7 +29,7 @@ define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_LOCKOUT_TIME', 900);
 
 // ĐỔI NGAY chuỗi này thành random string riêng của bạn!
-define('ENCRYPTION_KEY', '1234567890djfherueydhdksjdyheusjasisjdydhfgetrhsdfghuehdgsyteryudhg');
+define('ENCRYPTION_KEY', '');
 
 // Rate limiting nội bộ
 define('INTERNAL_RATE_LIMIT', 60);
