@@ -13,23 +13,23 @@
         return d.innerHTML;
     }
 
-    function showToast(message, type = 'success') {
+    function showToast(message, type) {
+        type = type || 'success';
         const c = document.getElementById('toastContainer');
         if (!c) return;
         const id = 't' + Date.now();
-        const bg = { success: 'bg-success', danger: 'bg-danger', warning: 'bg-warning text-dark', info: 'bg-info' }[type] || 'bg-info';
-        c.insertAdjacentHTML('beforeend', `
-            <div id="${id}" class="toast ${bg} text-white" role="alert">
-                <div class="d-flex">
-                    <div class="toast-body">${esc(message)}</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                </div>
-            </div>
-        `);
-        const el = document.getElementById(id);
-        const t = new bootstrap.Toast(el, { delay: 6000 });
-        t.show();
-        el.addEventListener('hidden.bs.toast', () => el.remove());
+        const bgMap = { success:'bg-success', danger:'bg-danger', warning:'bg-warning text-dark', info:'bg-info' };
+        const bg = bgMap[type] || 'bg-info';
+        c.insertAdjacentHTML('beforeend',
+            '<div id="'+id+'" class="toast '+bg+' text-white" role="alert">' +
+            '<div class="d-flex"><div class="toast-body">'+esc(message)+'</div>' +
+            '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
+            '</div></div>'
+        );
+        var el = document.getElementById(id);
+        var toast = new bootstrap.Toast(el, { delay: 6000 });
+        toast.show();
+        el.addEventListener('hidden.bs.toast', function() { el.remove(); });
     }
 
     function setBtn(btn, loading) {
@@ -44,113 +44,65 @@
         }
     }
 
-    /**
-     * Format thời gian từ API - giữ nguyên thời gian gốc từ server
-     * API trả về dạng: "2025-10-23T09:50:56+00:00"
-     * Chỉ format hiển thị, không chuyển đổi timezone
-     */
-    function formatTaskTime(dateStr) {
-        if (!dateStr) return '—';
-        
-        try {
-            // Parse trực tiếp string để lấy các phần
-            // Format: "2025-10-23T09:50:56+00:00"
-            const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-            if (!match) return dateStr;
-
-            const [, year, month, day, hour, min, sec] = match;
-
-            // Lấy phần timezone offset nếu có
-            const tzMatch = dateStr.match(/([+-]\d{2}):?(\d{2})$/);
-            let tzStr = 'UTC';
-            if (tzMatch) {
-                const tzHour = tzMatch[1];
-                const tzMin = tzMatch[2];
-                if (tzHour === '+00' && tzMin === '00') {
-                    tzStr = 'UTC';
-                } else {
-                    tzStr = 'UTC' + tzHour + ':' + tzMin;
-                }
-            }
-
-            return `${day}/${month}/${year} ${hour}:${min}:${sec} ${tzStr}`;
-        } catch (e) {
-            return dateStr;
-        }
+    function formatApiTime(raw) {
+        if (!raw) return '—';
+        return raw.replace('T', ' ').replace(/\+00:00$/, ' UTC').replace(/\+(\d{2}):(\d{2})$/, ' UTC+$1:$2');
     }
 
-    /**
-     * Tính thời gian đã trôi qua kể từ task
-     */
-    function timeAgo(dateStr) {
-        if (!dateStr) return '';
-        
-        try {
-            const taskDate = new Date(dateStr);
-            const now = new Date();
-            const diffMs = now - taskDate;
-            
-            if (isNaN(diffMs) || diffMs < 0) return '';
-
-            const diffSec = Math.floor(diffMs / 1000);
-            const diffMin = Math.floor(diffSec / 60);
-            const diffHour = Math.floor(diffMin / 60);
-            const diffDay = Math.floor(diffHour / 24);
-
-            if (diffSec < 60) return diffSec + 's ago';
-            if (diffMin < 60) return diffMin + 'm ago';
-            if (diffHour < 24) return diffHour + 'h ago';
-            if (diffDay < 30) return diffDay + 'd ago';
-            return '';
-        } catch (e) {
-            return '';
-        }
-    }
-
-    /**
-     * Tính duration giữa started và finished
-     */
-    function taskDuration(started, finished) {
+    function calcDuration(started, finished) {
         if (!started || !finished) return '';
-        
         try {
-            const s = new Date(started);
-            const f = new Date(finished);
-            const diffMs = f - s;
-            
-            if (isNaN(diffMs) || diffMs < 0) return '';
-
-            const diffSec = Math.floor(diffMs / 1000);
-            
-            if (diffSec < 1) return '<1s';
-            if (diffSec < 60) return diffSec + 's';
-            if (diffSec < 3600) return Math.floor(diffSec / 60) + 'm ' + (diffSec % 60) + 's';
-            return Math.floor(diffSec / 3600) + 'h ' + Math.floor((diffSec % 3600) / 60) + 'm';
-        } catch (e) {
-            return '';
-        }
+            var ms = new Date(finished).getTime() - new Date(started).getTime();
+            if (isNaN(ms) || ms < 0) return '';
+            var sec = Math.floor(ms / 1000);
+            if (sec < 1) return '<1s';
+            if (sec < 60) return sec + 's';
+            if (sec < 3600) return Math.floor(sec/60) + 'm ' + (sec%60) + 's';
+            return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
+        } catch(e) { return ''; }
     }
 
-    // ============ API CALL ============
+    function calcAgo(dateStr) {
+        if (!dateStr) return '';
+        try {
+            var ms = Date.now() - new Date(dateStr).getTime();
+            if (isNaN(ms) || ms < 0) return '';
+            var sec = Math.floor(ms/1000);
+            var min = Math.floor(sec/60);
+            var hr = Math.floor(min/60);
+            var day = Math.floor(hr/24);
+            if (sec < 60) return sec + 's ago';
+            if (min < 60) return min + 'm ago';
+            if (hr < 24) return hr + 'h ago';
+            return day + 'd ago';
+        } catch(e) { return ''; }
+    }
 
-    async function api(action, data = {}, btn = null) {
+    // ============ API ============
+
+    async function api(action, data, btn) {
+        data = data || {};
+        btn = btn || null;
         setBtn(btn, true);
         try {
-            const res = await fetch(API_URL, {
+            var res = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify({ action, csrf_token: csrfToken, ...data }),
-                credentials: 'same-origin',
+                headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+                body: JSON.stringify(Object.assign({ action: action, csrf_token: csrfToken }, data)),
+                credentials: 'same-origin'
             });
-            const json = await res.json();
+            var json = await res.json();
 
-            if (json.csrf_token) csrfToken = json.csrf_token;
-            if (json.new_csrf) csrfToken = json.new_csrf;
+            // Cập nhật CSRF nếu server trả về
+            if (json.csrf_token) {
+                csrfToken = json.csrf_token;
+                var ci = document.getElementById('csrfToken');
+                if (ci) ci.value = csrfToken;
+            }
 
-            const ci = document.getElementById('csrfToken');
-            if (ci) ci.value = csrfToken;
-
-            if (!res.ok || !json.success) throw new Error(json.error || 'Request failed');
+            if (!res.ok || !json.success) {
+                throw new Error(json.error || 'Request failed (HTTP ' + res.status + ')');
+            }
             return json;
         } catch (e) {
             showToast(e.message, 'danger');
@@ -163,15 +115,15 @@
     // ============ CONFIRM ============
 
     function confirm2(title, msg) {
-        return new Promise(resolve => {
-            const m = document.getElementById('confirmModal');
+        return new Promise(function(resolve) {
+            var m = document.getElementById('confirmModal');
             if (!m) return resolve(confirm(msg));
 
             document.getElementById('confirmModalTitle').textContent = title;
             document.getElementById('confirmModalBody').textContent = msg;
 
-            const bm = new bootstrap.Modal(m);
-            const cb = document.getElementById('confirmModalBtn');
+            var bm = new bootstrap.Modal(m);
+            var cb = document.getElementById('confirmModalBtn');
 
             function yes() { bm.hide(); cb.removeEventListener('click', yes); resolve(true); }
             function closed() { m.removeEventListener('hidden.bs.modal', closed); cb.removeEventListener('click', yes); resolve(false); }
@@ -184,307 +136,372 @@
 
     // ============ DASHBOARD POWER ============
 
-    document.querySelectorAll('.power-action').forEach(btn => {
-        btn.addEventListener('click', async function (e) {
+    document.querySelectorAll('.power-action').forEach(function(btn) {
+        btn.addEventListener('click', async function(e) {
             e.preventDefault();
-            const action = this.dataset.action;
-            const sid = this.dataset.server;
-            const labels = { boot: 'Boot', restart: 'Restart', shutdown: 'Shutdown', powerOff: 'Force Power Off' };
+            var action = this.dataset.action;
+            var sid = this.dataset.server;
+            var labels = { boot:'Boot', restart:'Restart', shutdown:'Shutdown', powerOff:'Force Power Off' };
 
-            if (!await confirm2('Confirm', `${labels[action] || action} this server?`)) return;
+            if (!(await confirm2('Confirm', (labels[action]||action) + ' this server?'))) return;
 
             try {
-                const r = await api(action, { server_id: sid }, this);
-                const tid = r.data?.data?.task?.id;
-                showToast(`${labels[action]} sent${tid ? ' — Task #' + tid : ''}`, 'success');
-            } catch (e) {}
+                var r = await api(action, { server_id: sid }, this);
+                var tid = r.data && r.data.data && r.data.data.task ? r.data.data.task.id : null;
+                showToast((labels[action]||action) + ' sent' + (tid ? ' — Task #'+tid : ''), 'success');
+            } catch(e) {}
         });
     });
 
-    // ============ SERVER DETAIL ACTIONS ============
+    // ============ SERVER ACTIONS ============
 
-    document.querySelectorAll('.server-action').forEach(btn => {
-        btn.addEventListener('click', async function (e) {
+    document.querySelectorAll('.server-action').forEach(function(btn) {
+        btn.addEventListener('click', async function(e) {
             e.preventDefault();
-            const action = this.dataset.action;
-            const sid = document.getElementById('serverId')?.value;
+            var action = this.dataset.action;
+            var sid = document.getElementById('serverId');
             if (!sid) return;
+            sid = sid.value;
 
-            const cm = this.dataset.confirm;
-            if (cm && !await confirm2('Confirm', cm)) return;
+            var cm = this.dataset.confirm;
+            if (cm && !(await confirm2('Confirm', cm))) return;
 
             try {
-                const r = await api(action, { server_id: sid }, this);
+                var r = await api(action, { server_id: sid }, this);
 
-                if (action === 'resetPassword' && r.data?.data?.expectedPassword) {
-                    const pw = r.data.data.expectedPassword;
+                if (action === 'resetPassword' && r.data && r.data.data && r.data.data.expectedPassword) {
+                    var pw = r.data.data.expectedPassword;
                     showToast('Password reset successful!', 'success');
-
-                    const box = document.createElement('div');
+                    var box = document.createElement('div');
                     box.className = 'alert alert-warning alert-dismissible fade show mt-3';
-                    box.innerHTML = `
-                        <strong><i class="bi bi-key"></i> New Password:</strong>
-                        <code style="font-size:1.1em;user-select:all;cursor:pointer" 
-                              onclick="navigator.clipboard?.writeText('${esc(pw)}');alert('Copied!')">${esc(pw)}</code>
-                        <small class="d-block mt-1" style="color:var(--accent-yellow)">Click to copy. Save this password now!</small>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    `;
-                    const container = document.querySelector('.main-content .container-fluid');
-                    container.insertBefore(box, container.children[1]);
+                    box.innerHTML = '<strong><i class="bi bi-key"></i> New Password:</strong> ' +
+                        '<code style="font-size:1.1em;user-select:all;cursor:pointer" ' +
+                        'onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent);alert(\'Copied!\')">' +
+                        esc(pw) + '</code>' +
+                        '<small class="d-block mt-1" style="color:var(--accent-yellow)">Click code to copy. Save now!</small>' +
+                        '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                    var container = document.querySelector('.main-content .container-fluid');
+                    if (container.children[1]) {
+                        container.insertBefore(box, container.children[1]);
+                    } else {
+                        container.appendChild(box);
+                    }
                 } else {
-                    const tid = r.data?.data?.task?.id;
-                    showToast(`"${action}" sent${tid ? ' — Task #' + tid : ''}`, 'success');
+                    var tid = r.data && r.data.data && r.data.data.task ? r.data.data.task.id : null;
+                    showToast('"' + action + '" sent' + (tid ? ' — Task #'+tid : ''), 'success');
                 }
 
                 setTimeout(loadTasks, 2000);
-            } catch (e) {}
+            } catch(e) {}
         });
     });
 
     // ============ RENAME ============
 
-    document.getElementById('changeNameBtn')?.addEventListener('click', async function () {
-        const name = document.getElementById('newServerName')?.value?.trim();
-        const sid = document.getElementById('serverId')?.value;
-        if (!name || !sid) return showToast('Enter a name', 'warning');
+    var changeNameBtn = document.getElementById('changeNameBtn');
+    if (changeNameBtn) {
+        changeNameBtn.addEventListener('click', async function() {
+            var inp = document.getElementById('newServerName');
+            var name = inp ? inp.value.trim() : '';
+            var sid = document.getElementById('serverId');
+            if (!name || !sid) return showToast('Enter a name', 'warning');
 
-        try {
-            await api('changeName', { server_id: sid, name }, this);
-            showToast('Name updated', 'success');
-            const el = document.getElementById('serverName');
-            if (el) el.textContent = name;
-        } catch (e) {}
-    });
+            try {
+                await api('changeName', { server_id: sid.value, name: name }, this);
+                showToast('Name updated', 'success');
+                var el = document.getElementById('serverName');
+                if (el) el.textContent = name;
+            } catch(e) {}
+        });
+    }
 
     // ============ SETTINGS ============
 
-    document.getElementById('saveSettingsBtn')?.addEventListener('click', async function () {
-        const sid = document.getElementById('serverId')?.value;
-        if (!sid) return;
-        try {
-            await api('updateSettings', {
-                server_id: sid,
-                bootType: document.getElementById('bootType')?.value,
-            }, this);
-            showToast('Settings saved', 'success');
-        } catch (e) {}
-    });
+    var saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    if (saveSettingsBtn) {
+        saveSettingsBtn.addEventListener('click', async function() {
+            var sid = document.getElementById('serverId');
+            if (!sid) return;
+            try {
+                await api('updateSettings', {
+                    server_id: sid.value,
+                    bootType: document.getElementById('bootType').value
+                }, this);
+                showToast('Settings saved', 'success');
+            } catch(e) {}
+        });
+    }
 
-    document.getElementById('saveBootOrderBtn')?.addEventListener('click', async function () {
-        const sid = document.getElementById('serverId')?.value;
-        if (!sid) return;
-        try {
-            await api('setBootOrder', {
-                server_id: sid,
-                order: document.getElementById('bootOrder')?.value,
-            }, this);
-            showToast('Boot order updated', 'success');
-        } catch (e) {}
-    });
+    var saveBootOrderBtn = document.getElementById('saveBootOrderBtn');
+    if (saveBootOrderBtn) {
+        saveBootOrderBtn.addEventListener('click', async function() {
+            var sid = document.getElementById('serverId');
+            if (!sid) return;
+            try {
+                await api('setBootOrder', {
+                    server_id: sid.value,
+                    order: document.getElementById('bootOrder').value
+                }, this);
+                showToast('Boot order updated', 'success');
+            } catch(e) {}
+        });
+    }
 
     // ============ VNC DETAILS ============
 
-    document.getElementById('vncDetailsBtn')?.addEventListener('click', async function () {
-        const sid = document.getElementById('serverId')?.value;
-        if (!sid) return;
+    var vncDetailsBtn = document.getElementById('vncDetailsBtn');
+    if (vncDetailsBtn) {
+        vncDetailsBtn.addEventListener('click', async function() {
+            var sid = document.getElementById('serverId');
+            if (!sid) return;
 
-        const card = document.getElementById('vncDetailsCard');
-        const body = document.getElementById('vncDetailsBody');
+            var card = document.getElementById('vncDetailsCard');
+            var body = document.getElementById('vncDetailsBody');
 
-        body.innerHTML = '<div class="text-center py-3" style="color:var(--text-muted)"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
-        card.classList.remove('d-none');
+            body.innerHTML = '<div class="text-center py-3" style="color:var(--text-muted)"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+            card.classList.remove('d-none');
 
-        try {
-            const r = await api('vncDetails', { server_id: sid }, this);
-            const v = r.data?.data;
+            try {
+                var r = await api('vncDetails', { server_id: sid.value }, this);
+                var v = r.data ? r.data.data : null;
 
-            if (!v) {
-                body.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle"></i> VNC not enabled. Enable it first.</div>';
-                return;
+                if (!v) {
+                    body.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle"></i> VNC not enabled.</div>';
+                    return;
+                }
+
+                body.innerHTML =
+                    '<table class="table table-sm mb-0">' +
+                    '<tr><th>IP</th><td><code>' + esc(v.ip||'—') + '</code></td></tr>' +
+                    '<tr><th>Port</th><td><code>' + esc(String(v.port||'—')) + '</code></td></tr>' +
+                    '<tr><th>Password</th><td><code style="user-select:all;cursor:pointer;font-size:1em" ' +
+                    'onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent);alert(\'Copied!\')" ' +
+                    'title="Click to copy">' + esc(v.password||'—') + '</code></td></tr>' +
+                    '<tr><th>Status</th><td><span class="badge ' + (v.enabled?'bg-success':'bg-danger') + '">' +
+                    (v.enabled?'Enabled':'Disabled') + '</span></td></tr>' +
+                    (v.wss && v.wss.url ? '<tr><th>Web VNC</th><td><a href="'+esc(v.wss.url)+'" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info"><i class="bi bi-box-arrow-up-right"></i> Open noVNC</a></td></tr>' : '') +
+                    '</table>' +
+                    (v.enabled ? '<div class="mt-3"><small style="color:var(--text-muted)"><i class="bi bi-info-circle"></i> VNC Client: <code>'+esc(v.ip)+':'+esc(String(v.port))+'</code></small></div>' : '');
+            } catch(e) {
+                body.innerHTML = '<div class="alert alert-danger mb-0">' + esc(e.message) + '</div>';
             }
+        });
+    }
 
-            body.innerHTML = `
-                <table class="table table-sm mb-0">
-                    <tr><th>IP</th><td><code>${esc(v.ip || '—')}</code></td></tr>
-                    <tr><th>Port</th><td><code>${esc(String(v.port || '—'))}</code></td></tr>
-                    <tr>
-                        <th>Password</th>
-                        <td>
-                            <code style="user-select:all;cursor:pointer;font-size:1em" 
-                                  onclick="navigator.clipboard?.writeText('${esc(v.password || '')}');alert('Copied!')"
-                                  title="Click to copy">${esc(v.password || '—')}</code>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Status</th>
-                        <td><span class="badge ${v.enabled ? 'bg-success' : 'bg-danger'}">${v.enabled ? 'Enabled' : 'Disabled'}</span></td>
-                    </tr>
-                    ${v.wss?.url ? `<tr><th>Web VNC</th><td><code style="word-break:break-all;font-size:0.7rem">${esc(v.wss.url)}</code></td></tr>` : ''}
-                </table>
-                ${v.enabled ? `<div class="mt-3"><small style="color:var(--text-muted)"><i class="bi bi-info-circle"></i> Connect: <code>${esc(v.ip)}:${esc(String(v.port))}</code></small></div>` : 
-                `<div class="mt-3"><small style="color:var(--accent-yellow)"><i class="bi bi-exclamation-triangle"></i> VNC disabled. Toggle to enable.</small></div>`}
-            `;
-        } catch (e) {
-            body.innerHTML = `<div class="alert alert-danger mb-0">${esc(e.message)}</div>`;
-        }
-    });
+    // ============ ISO MANAGEMENT ============
 
-    // ============ TASKS - FIXED TIME ============
+    var loadIsosBtn = document.getElementById('loadIsosBtn');
+    if (loadIsosBtn) {
+        loadIsosBtn.addEventListener('click', async function() {
+            var sid = document.getElementById('serverId');
+            if (!sid) return;
+
+            var container = document.getElementById('isoListContainer');
+            var select = document.getElementById('isoSelect');
+
+            try {
+                var r = await api('getISOs', { server_id: sid.value }, this);
+                var isos = r.data && r.data.data ? r.data.data : [];
+
+                select.innerHTML = '<option value="">— Select ISO —</option>';
+                if (isos.length === 0) {
+                    select.innerHTML = '<option value="">No ISOs available</option>';
+                } else {
+                    isos.forEach(function(iso) {
+                        var opt = document.createElement('option');
+                        opt.value = iso.id || iso.name || iso;
+                        opt.textContent = iso.name || iso.id || iso;
+                        if (iso.description) opt.title = iso.description;
+                        select.appendChild(opt);
+                    });
+                }
+
+                container.classList.remove('d-none');
+            } catch(e) {}
+        });
+    }
+
+    var mountIsoBtn = document.getElementById('mountIsoBtn');
+    if (mountIsoBtn) {
+        mountIsoBtn.addEventListener('click', async function() {
+            var sid = document.getElementById('serverId');
+            var select = document.getElementById('isoSelect');
+            if (!sid || !select || !select.value) return showToast('Select an ISO first', 'warning');
+
+            if (!(await confirm2('Mount ISO', 'Mount this ISO to the server?'))) return;
+
+            try {
+                var r = await api('mountISO', { server_id: sid.value, iso: select.value }, this);
+                var tid = r.data && r.data.data && r.data.data.task ? r.data.data.task.id : null;
+                showToast('ISO mount initiated' + (tid ? ' — Task #'+tid : ''), 'success');
+                setTimeout(loadTasks, 2000);
+            } catch(e) {}
+        });
+    }
+
+    var mountIsoUrlBtn = document.getElementById('mountIsoUrlBtn');
+    if (mountIsoUrlBtn) {
+        mountIsoUrlBtn.addEventListener('click', async function() {
+            var sid = document.getElementById('serverId');
+            var inp = document.getElementById('isoUrlInput');
+            var url = inp ? inp.value.trim() : '';
+            if (!sid || !url) return showToast('Enter ISO URL', 'warning');
+
+            if (!(await confirm2('Mount ISO', 'Mount ISO from URL: ' + url + '?'))) return;
+
+            try {
+                var r = await api('mountISO', { server_id: sid.value, iso: url }, this);
+                var tid = r.data && r.data.data && r.data.data.task ? r.data.data.task.id : null;
+                showToast('ISO mount initiated' + (tid ? ' — Task #'+tid : ''), 'success');
+                inp.value = '';
+                setTimeout(loadTasks, 2000);
+            } catch(e) {}
+        });
+    }
+
+    // ============ TASKS ============
 
     async function loadTasks() {
-        const container = document.getElementById('tasksContainer');
-        const sid = document.getElementById('serverId')?.value;
-        if (!container || !sid) return;
+        var container = document.getElementById('tasksContainer');
+        var sidEl = document.getElementById('serverId');
+        if (!container || !sidEl) return;
+        var sid = sidEl.value;
 
         container.innerHTML = '<div class="text-center py-4" style="color:var(--text-muted)"><div class="spinner-border spinner-border-sm"></div> Loading tasks...</div>';
 
         try {
-            const r = await api('getTasks', { server_id: sid });
-            const tasks = r.data?.data || [];
+            var r = await api('getTasks', { server_id: sid });
+            var tasks = r.data && r.data.data ? r.data.data : [];
 
             if (!tasks.length) {
                 container.innerHTML = '<div class="text-center py-4" style="color:var(--text-muted)"><i class="bi bi-inbox"></i> No tasks found</div>';
                 return;
             }
 
-            let html = '';
-            tasks.slice(0, 20).forEach(task => {
-                const ok = task.success === true;
-                const done = task.completed === true;
-                const pending = !done;
+            var html = '';
+            var max = Math.min(tasks.length, 20);
+            for (var i = 0; i < max; i++) {
+                var task = tasks[i];
+                var ok = task.success === true;
+                var done = task.completed === true;
+                var pending = !done;
 
-                let iconClass, statusBg, statusText;
+                var iconClass, statusBg, statusText, iconColor;
                 if (pending) {
-                    iconClass = 'bi-hourglass-split';
-                    statusBg = 'bg-warning';
-                    statusText = task.status || 'pending';
+                    iconClass = 'bi-hourglass-split'; statusBg = 'bg-warning'; statusText = task.status || 'pending'; iconColor = '--accent-yellow';
                 } else if (ok) {
-                    iconClass = 'bi-check-circle-fill';
-                    statusBg = 'bg-success';
-                    statusText = 'complete';
+                    iconClass = 'bi-check-circle-fill'; statusBg = 'bg-success'; statusText = 'complete'; iconColor = '--accent-green';
                 } else {
-                    iconClass = 'bi-x-circle-fill';
-                    statusBg = 'bg-danger';
-                    statusText = 'failed';
+                    iconClass = 'bi-x-circle-fill'; statusBg = 'bg-danger'; statusText = 'failed'; iconColor = '--accent-red';
                 }
 
-                // Format action name đẹp hơn
-                const actionName = (task.action || 'unknown')
-                    .replace(/_/g, ' ')
-                    .replace(/\b\w/g, c => c.toUpperCase());
+                var actionName = (task.action || 'unknown').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
 
-                // Thời gian bắt đầu - giữ nguyên từ API
-                const startTime = formatTaskTime(task.started);
-                
-                // Thời gian kết thúc
-                const endTime = task.finished ? formatTaskTime(task.finished) : '';
-                
-                // Duration
-                const duration = taskDuration(task.started, task.finished);
-                
-                // Time ago
-                const ago = timeAgo(task.finished || task.started);
+                var startDisplay = formatApiTime(task.started);
+                var finishDisplay = task.finished ? formatApiTime(task.finished) : '';
+                var duration = calcDuration(task.started, task.finished);
+                var ago = calcAgo(task.finished || task.started);
 
-                html += `
-                    <div class="task-item">
-                        <div class="d-flex align-items-start gap-3 flex-grow-1">
-                            <i class="bi ${iconClass} mt-1" style="font-size:1.1rem;color:var(${
-                                pending ? '--accent-yellow' : ok ? '--accent-green' : '--accent-red'
-                            })"></i>
-                            <div class="flex-grow-1">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="task-action">${esc(actionName)}</span>
-                                    <span class="badge ${statusBg}">${esc(statusText)}</span>
-                                </div>
-                                <div class="task-time mt-1">
-                                    <i class="bi bi-clock me-1"></i>${esc(startTime)}
-                                    ${duration ? `<span class="ms-2"><i class="bi bi-stopwatch me-1"></i>${esc(duration)}</span>` : ''}
-                                    ${ago ? `<span class="ms-2" style="color:var(--accent-blue)">${esc(ago)}</span>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
+                html += '<div class="task-item">' +
+                    '<div class="d-flex align-items-start gap-3 flex-grow-1" style="min-width:0">' +
+                    '<i class="bi ' + iconClass + ' mt-1 flex-shrink-0" style="font-size:1.1rem;color:var(' + iconColor + ')"></i>' +
+                    '<div class="flex-grow-1" style="min-width:0">' +
+                    '<div class="d-flex justify-content-between align-items-center gap-2">' +
+                    '<span class="task-action">' + esc(actionName) + '</span>' +
+                    '<div class="d-flex align-items-center gap-2 flex-shrink-0">' +
+                    (duration ? '<span style="color:var(--text-muted);font-size:0.6875rem"><i class="bi bi-stopwatch"></i> ' + esc(duration) + '</span>' : '') +
+                    (ago ? '<span style="color:var(--accent-blue);font-size:0.6875rem">' + esc(ago) + '</span>' : '') +
+                    '<span class="badge ' + statusBg + '">' + esc(statusText) + '</span>' +
+                    '</div></div>' +
+                    '<div class="task-time mt-1">' +
+                    '<span><i class="bi bi-play-circle me-1"></i>Start: ' + esc(startDisplay) + '</span>' +
+                    (finishDisplay ? '<span class="ms-3"><i class="bi bi-stop-circle me-1"></i>End: ' + esc(finishDisplay) + '</span>' : '') +
+                    '</div></div></div></div>';
+            }
 
             container.innerHTML = html;
-        } catch (e) {
+        } catch(e) {
             container.innerHTML = '<div class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle"></i> Failed to load tasks</div>';
         }
     }
 
-    // Load tasks 1 lần duy nhất khi mở trang, không auto refresh
     if (document.getElementById('tasksContainer')) {
         setTimeout(loadTasks, 500);
     }
 
-    // Chỉ refresh khi bấm nút
-    document.getElementById('refreshTasks')?.addEventListener('click', loadTasks);
+    var refreshTasksBtn = document.getElementById('refreshTasks');
+    if (refreshTasksBtn) {
+        refreshTasksBtn.addEventListener('click', loadTasks);
+    }
     window.loadTasks = loadTasks;
 
-    // ============ BUILD FORM ============
+    // ============ BUILD ============
 
-    const confirmBuild = document.getElementById('confirmBuild');
-    const buildBtn = document.getElementById('buildBtn');
+    var confirmBuild = document.getElementById('confirmBuild');
+    var buildBtn = document.getElementById('buildBtn');
 
     if (confirmBuild && buildBtn) {
-        confirmBuild.addEventListener('change', () => { buildBtn.disabled = !confirmBuild.checked; });
+        confirmBuild.addEventListener('change', function() { buildBtn.disabled = !confirmBuild.checked; });
     }
 
-    const buildForm = document.getElementById('buildForm');
-    const methodSel = document.getElementById('buildMethod');
-    const tplGroup = document.getElementById('templateGroup');
+    var methodSel = document.getElementById('buildMethod');
+    var tplGroup = document.getElementById('templateGroup');
 
     if (methodSel && tplGroup) {
-        methodSel.addEventListener('change', function () {
+        methodSel.addEventListener('change', function() {
             tplGroup.style.display = this.value === 'self' ? 'none' : '';
-            const tplId = document.getElementById('templateId');
+            var tplId = document.getElementById('templateId');
             if (tplId) tplId.required = this.value !== 'self';
         });
     }
 
+    var buildForm = document.getElementById('buildForm');
     if (buildForm) {
-        buildForm.addEventListener('submit', async function (e) {
+        buildForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            if (!await confirm2('⚠️ Build Server', 'ALL DATA will be erased. This cannot be undone. Continue?')) return;
+            if (!(await confirm2('⚠️ Build Server', 'ALL DATA will be erased. Cannot be undone. Continue?'))) return;
 
-            const sid = document.getElementById('buildServerId')?.value;
-            if (!sid) return;
+            var sidEl = document.getElementById('buildServerId');
+            if (!sidEl) return;
+            var sid = sidEl.value;
 
-            const keys = [];
-            document.querySelectorAll('.ssh-key-check:checked').forEach(cb => keys.push(parseInt(cb.value)));
+            var keys = [];
+            document.querySelectorAll('.ssh-key-check:checked').forEach(function(cb) { keys.push(parseInt(cb.value)); });
 
             try {
-                const r = await api('build', {
+                var r = await api('build', {
                     server_id: sid,
                     method: document.getElementById('buildMethod').value,
-                    templateId: parseInt(document.getElementById('templateId')?.value) || 0,
-                    hostname: document.getElementById('buildHostname')?.value?.trim() || '',
-                    name: document.getElementById('buildName')?.value?.trim() || '',
-                    timezone: document.getElementById('buildTimezone')?.value || 'UTC',
-                    swap: parseInt(document.getElementById('buildSwap')?.value) || 0,
-                    ipv6: document.getElementById('buildIpv6')?.checked || false,
+                    templateId: parseInt(document.getElementById('templateId') ? document.getElementById('templateId').value : 0) || 0,
+                    hostname: (document.getElementById('buildHostname') ? document.getElementById('buildHostname').value.trim() : ''),
+                    name: (document.getElementById('buildName') ? document.getElementById('buildName').value.trim() : ''),
+                    timezone: (document.getElementById('buildTimezone') ? document.getElementById('buildTimezone').value : 'UTC'),
+                    swap: parseInt(document.getElementById('buildSwap') ? document.getElementById('buildSwap').value : 0) || 0,
+                    ipv6: document.getElementById('buildIpv6') ? document.getElementById('buildIpv6').checked : false,
                     sshKeys: keys,
-                    userData: document.getElementById('buildUserData')?.value || '',
+                    userData: document.getElementById('buildUserData') ? document.getElementById('buildUserData').value : ''
                 }, buildBtn);
 
-                const tid = r.data?.data?.task?.id;
-                showToast(`Build started${tid ? ' — Task #' + tid : ''}`, 'success');
-                setTimeout(() => { window.location.href = 'index.php?page=server-detail&id=' + sid; }, 3000);
-            } catch (e) {}
+                var tid = r.data && r.data.data && r.data.data.task ? r.data.data.task.id : null;
+                showToast('Build started' + (tid ? ' — Task #'+tid : ''), 'success');
+                setTimeout(function() { window.location.href = 'index.php?page=server-detail&id=' + sid; }, 3000);
+            } catch(e) {}
         });
     }
 
     // ============ TEST CONNECTION ============
 
-    document.getElementById('testConnection')?.addEventListener('click', async function () {
-        const rd = document.getElementById('connectionResult');
-        try {
-            await api('testConnection', {}, this);
-            rd.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Connected!</div>';
-        } catch (e) {
-            rd.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Failed</div>';
-        }
-    });
+    var testConnBtn = document.getElementById('testConnection');
+    if (testConnBtn) {
+        testConnBtn.addEventListener('click', async function() {
+            var rd = document.getElementById('connectionResult');
+            try {
+                await api('testConnection', {}, this);
+                rd.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Connected!</div>';
+            } catch(e) {
+                rd.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Failed</div>';
+            }
+        });
+    }
 
 })();
