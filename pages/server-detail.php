@@ -19,7 +19,6 @@ if (!$result['success']) {
 $server = $result['data']['data'] ?? [];
 $state = $server['state'] ?? null;
 $csrfToken = Security::generateCsrfToken();
-
 $isRunning = $state['running'] ?? false;
 ?>
 
@@ -53,9 +52,7 @@ $isRunning = $state['running'] ?? false;
     <div class="col-lg-8">
         <!-- Server Info -->
         <div class="card mb-4">
-            <div class="card-header">
-                <h5><i class="bi bi-info-circle"></i> Server Information</h5>
-            </div>
+            <div class="card-header"><h5><i class="bi bi-info-circle"></i> Server Information</h5></div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
@@ -87,12 +84,10 @@ $isRunning = $state['running'] ?? false;
                             <tr><th>Created</th><td><?= formatDate($server['created'] ?? '') ?></td></tr>
                             <tr>
                                 <th>Period</th>
-                                <td>
-                                    <?php 
+                                <td><?php
                                     $p = $server['currentMonthlyPeriod'] ?? null;
                                     echo $p ? e(formatDate($p['start'],'d/m') . ' — ' . formatDate($p['end'],'d/m/Y')) : '—';
-                                    ?>
-                                </td>
+                                ?></td>
                             </tr>
                         </table>
                     </div>
@@ -104,46 +99,32 @@ $isRunning = $state['running'] ?? false;
         <div class="card mb-4">
             <div class="card-header"><h5><i class="bi bi-diagram-3"></i> Network</h5></div>
             <div class="card-body">
-                <?php 
+                <?php
                 $network = $server['network'] ?? [];
                 foreach (['primary', 'secondary'] as $nic):
                     $d = $network[$nic] ?? null;
                     if (!$d || (is_array($d) && empty($d))) continue;
                 ?>
-                <h6 class="text-uppercase mb-2" style="color:var(--text-muted); font-size:0.6875rem; letter-spacing:1px;">
+                <h6 class="text-uppercase mb-2" style="color:var(--text-muted);font-size:0.6875rem;letter-spacing:1px">
                     <?= ucfirst($nic) ?> NIC
                 </h6>
                 <table class="table table-sm mb-3">
                     <tr><th width="100">MAC</th><td><code><?= e($d['mac'] ?? 'N/A') ?></code></td></tr>
-                    <?php if (isset($d['limit']) && $d['limit']): ?>
+                    <?php if (!empty($d['limit'])): ?>
                         <tr><th>Limit</th><td><?= e($d['limit']) ?></td></tr>
                     <?php endif; ?>
                     <?php foreach ($d['ipv4'] ?? [] as $ip): ?>
-                        <tr>
-                            <th>IPv4</th>
-                            <td>
-                                <code><?= e($ip['address']) ?></code>
-                                <small style="color:var(--text-muted)">
-                                    &nbsp;GW <?= e($ip['gateway']) ?> / <?= e($ip['netmask']) ?>
-                                </small>
-                            </td>
-                        </tr>
+                        <tr><th>IPv4</th><td><code><?= e($ip['address']) ?></code> <small style="color:var(--text-muted)">GW <?= e($ip['gateway']) ?> / <?= e($ip['netmask']) ?></small></td></tr>
                     <?php endforeach; ?>
                     <?php foreach ($d['ipv6'] ?? [] as $ip6): ?>
-                        <tr>
-                            <th>IPv6</th>
-                            <td><code style="font-size:0.7rem"><?= e($ip6['addresses'][0] ?? $ip6['subnet'] ?? 'N/A') ?></code></td>
-                        </tr>
+                        <tr><th>IPv6</th><td><code style="font-size:0.7rem"><?= e($ip6['addresses'][0] ?? $ip6['subnet'] ?? 'N/A') ?></code></td></tr>
                     <?php endforeach; ?>
                 </table>
                 <?php endforeach; ?>
 
-                <?php if ($state && isset($state['network'])): ?>
-                <h6 class="text-uppercase mb-2 mt-3" style="color:var(--text-muted); font-size:0.6875rem; letter-spacing:1px;">
-                    Traffic (Current Period)
-                </h6>
-                <?php foreach ($state['network'] as $nicName => $ns): 
-                    $t = $ns['traffic'] ?? [];
+                <?php if ($state && isset($state['network'])):
+                    foreach ($state['network'] as $nicName => $ns):
+                        $t = $ns['traffic'] ?? [];
                 ?>
                 <div class="d-flex gap-4 align-items-center mb-2" style="font-size:0.8125rem">
                     <span style="color:var(--text-muted);min-width:60px"><?= ucfirst(e($nicName)) ?></span>
@@ -207,8 +188,7 @@ $isRunning = $state['running'] ?? false;
                     <button class="btn btn-secondary server-action" data-action="shutdown">
                         <i class="bi bi-stop-fill"></i> Shutdown
                     </button>
-                    <button class="btn btn-danger server-action" 
-                            data-action="powerOff" data-confirm="Force power off this server?">
+                    <button class="btn btn-danger server-action" data-action="powerOff" data-confirm="Force power off this server?">
                         <i class="bi bi-power"></i> Power Off
                     </button>
                 </div>
@@ -219,18 +199,17 @@ $isRunning = $state['running'] ?? false;
         <div class="card mb-4">
             <div class="card-header"><h5><i class="bi bi-tools"></i> Actions</h5></div>
             <div class="card-body">
-                <!-- Rename -->
                 <div class="input-group mb-3">
-                    <input type="text" class="form-control" id="newServerName" 
+                    <input type="text" class="form-control" id="newServerName"
                            placeholder="Server name" maxlength="100"
                            value="<?= e($server['name'] ?? '') ?>">
-                    <button class="btn btn-outline-primary" id="changeNameBtn">
+                    <button class="btn btn-outline-primary" id="changeNameBtn" title="Rename">
                         <i class="bi bi-pencil"></i>
                     </button>
                 </div>
 
                 <div class="action-stack">
-                    <button class="btn btn-warning server-action" 
+                    <button class="btn btn-warning server-action"
                             data-action="resetPassword"
                             data-confirm="Reset password? A new one will be generated.">
                         <i class="bi bi-key"></i> Reset Password
@@ -257,6 +236,44 @@ $isRunning = $state['running'] ?? false;
                     <a href="index.php?page=build&id=<?= e($serverId) ?>" class="btn btn-outline-danger">
                         <i class="bi bi-wrench"></i> Build / Rebuild
                     </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ISO Management -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-disc"></i> ISO Management</h5>
+                <span class="badge <?= ($server['isoMounted'] ?? false) ? 'bg-success' : 'bg-secondary' ?>">
+                    <?= ($server['isoMounted'] ?? false) ? 'Mounted' : 'None' ?>
+                </span>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-outline-primary w-100 mb-3" id="loadIsosBtn">
+                    <i class="bi bi-search"></i> Load Available ISOs
+                </button>
+
+                <div id="isoListContainer" class="d-none">
+                    <div class="mb-3">
+                        <label class="form-label">Select ISO to mount</label>
+                        <select class="form-select" id="isoSelect">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary w-100 mb-2" id="mountIsoBtn">
+                        <i class="bi bi-disc"></i> Mount ISO
+                    </button>
+                </div>
+
+                <div class="mt-2">
+                    <label class="form-label">Or enter ISO URL</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="isoUrlInput"
+                               placeholder="https://example.com/image.iso">
+                        <button class="btn btn-outline-primary" id="mountIsoUrlBtn" title="Mount URL">
+                            <i class="bi bi-link-45deg"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -290,7 +307,7 @@ $isRunning = $state['running'] ?? false;
             </div>
         </div>
 
-        <!-- VNC Details -->
+        <!-- VNC Details (hidden) -->
         <div class="card mb-4 d-none" id="vncDetailsCard">
             <div class="card-header"><h5><i class="bi bi-display"></i> VNC Connection</h5></div>
             <div class="card-body" id="vncDetailsBody"></div>
